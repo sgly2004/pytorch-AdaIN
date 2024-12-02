@@ -7,7 +7,7 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.utils.data as data
 from PIL import Image, ImageFile
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
 import torchvision.utils as vutils
@@ -109,6 +109,8 @@ sample_dir.mkdir(exist_ok=True, parents=True)
 
 start_iter = 0
 
+optimizer = torch.optim.adam.Adam(network.decoder.parameters(), lr=args.lr)
+
 if args.resume:
     if os.path.isfile(args.resume):
         checkpoint = torch.load(args.resume)
@@ -131,8 +133,6 @@ style_iter = iter(data.DataLoader(
     style_dataset, batch_size=args.batch_size,
     sampler=InfiniteSamplerWrapper(style_dataset),
     num_workers=args.n_threads))
-
-optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
 
 for i in tqdm(range(start_iter, args.max_iter)):
     adjust_learning_rate(optimizer, iteration_count=i)
@@ -159,7 +159,7 @@ for i in tqdm(range(start_iter, args.max_iter)):
         torch.save(state_dict, save_dir /
                    'decoder_iter_{:d}.pth.tar'.format(i + 1))
 
-    if (i + 1) % 1000 == 0:  # 每1000次迭代保存一次断点
+    if (i + 1) % 100 == 0:  # 每100次迭代保存一次断点
         checkpoint = {
             'iteration': i + 1,
             'decoder_state_dict': network.decoder.state_dict(),
