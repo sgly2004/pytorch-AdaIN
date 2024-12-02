@@ -109,7 +109,7 @@ sample_dir.mkdir(exist_ok=True, parents=True)
 
 start_iter = 0
 
-optimizer = torch.optim.adam.Adam(network.decoder.parameters(), lr=args.lr)
+optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
 
 if args.resume:
     if os.path.isfile(args.resume):
