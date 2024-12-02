@@ -150,3 +150,10 @@ class Net(nn.Module):
         for i in range(1, 4):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
         return loss_c, loss_s
+
+    def transfer(self, content, style):
+        content_feat = self.encoder(content)
+        style_feat = self.encoder(style)
+        t = self.ada_in(content_feat, style_feat)
+        g_t = self.decoder(t)
+        return g_t

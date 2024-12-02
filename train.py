@@ -1,14 +1,16 @@
 import argparse
 from pathlib import Path
+import os
 
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.utils.data as data
 from PIL import Image, ImageFile
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm
+import torchvision.utils as vutils
 
 import net
 from sampler import InfiniteSamplerWrapper
@@ -76,6 +78,12 @@ parser.add_argument('--style_weight', type=float, default=10.0)
 parser.add_argument('--content_weight', type=float, default=1.0)
 parser.add_argument('--n_threads', type=int, default=16)
 parser.add_argument('--save_model_interval', type=int, default=10000)
+parser.add_argument('--checkpoint_dir', default='./checkpoints',
+                    help='Directory to save the checkpoints')
+parser.add_argument('--resume', type=str, default=None,
+                    help='Path to latest checkpoint')
+parser.add_argument('--sample_dir', default='./samples',
+                    help='Directory to save the intermediate samples')
 args = parser.parse_args()
 
 device = torch.device('cuda')
@@ -94,6 +102,21 @@ network = net.Net(vgg, decoder)
 network.train()
 network.to(device)
 
+checkpoint_dir = Path(args.checkpoint_dir)
+checkpoint_dir.mkdir(exist_ok=True, parents=True)
+sample_dir = Path(args.sample_dir)
+sample_dir.mkdir(exist_ok=True, parents=True)
+
+start_iter = 0
+
+if args.resume:
+    if os.path.isfile(args.resume):
+        checkpoint = torch.load(args.resume)
+        network.decoder.load_state_dict(checkpoint['decoder_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_iter = checkpoint['iteration']
+        print(f'Resumed from iteration {start_iter}')
+
 content_tf = train_transform()
 style_tf = train_transform()
 
@@ -111,7 +134,7 @@ style_iter = iter(data.DataLoader(
 
 optimizer = torch.optim.Adam(network.decoder.parameters(), lr=args.lr)
 
-for i in tqdm(range(args.max_iter)):
+for i in tqdm(range(start_iter, args.max_iter)):
     adjust_learning_rate(optimizer, iteration_count=i)
     content_images = next(content_iter).to(device)
     style_images = next(style_iter).to(device)
@@ -126,6 +149,8 @@ for i in tqdm(range(args.max_iter)):
 
     writer.add_scalar('loss_content', loss_c.item(), i + 1)
     writer.add_scalar('loss_style', loss_s.item(), i + 1)
+    writer.add_scalar('loss_total', loss.item(), i + 1)
+    writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], i + 1)
 
     if (i + 1) % args.save_model_interval == 0 or (i + 1) == args.max_iter:
         state_dict = net.decoder.state_dict()
@@ -133,4 +158,33 @@ for i in tqdm(range(args.max_iter)):
             state_dict[key] = state_dict[key].to(torch.device('cpu'))
         torch.save(state_dict, save_dir /
                    'decoder_iter_{:d}.pth.tar'.format(i + 1))
+
+    if (i + 1) % 1000 == 0:  # 每1000次迭代保存一次断点
+        checkpoint = {
+            'iteration': i + 1,
+            'decoder_state_dict': network.decoder.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+        }
+        torch.save(checkpoint, checkpoint_dir / f'checkpoint_{i+1}.pth')
+
+    save_points = [int(args.max_iter * x) for x in [0.1, 0.5, 0.8, 1.0]]
+    if (i + 1) in save_points:
+        network.eval()
+        with torch.no_grad():
+            content_images = next(content_iter).to(device)
+            style_images = next(style_iter).to(device)
+            output = network.transfer(content_images, style_images)
+            
+            # 保存结果图像
+            filename = sample_dir / f'iter_{i+1}_grid.png'
+            grid = vutils.make_grid(
+                torch.cat([content_images, style_images, output], dim=0),
+                nrow=args.batch_size
+            )
+            vutils.save_image(grid, filename, normalize=True)
+            
+            # 添加到tensorboard
+            writer.add_image('Transfer_Results', grid, i + 1)
+        network.train()
+
 writer.close()
