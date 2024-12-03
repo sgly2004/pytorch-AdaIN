@@ -151,9 +151,11 @@ class Net(nn.Module):
             loss_s += self.calc_style_loss(g_t_feats[i], style_feats[i])
         return loss_c, loss_s
 
-    def transfer(self, content, style):
-        content_feat = self.encoder(content)
-        style_feat = self.encoder(style)
-        t = self.ada_in(content_feat, style_feat)
+    def transfer(self, content, style, alpha=1.0):
+        assert 0 <= alpha <= 1
+        style_feat = self.encode(style)
+        content_feat = self.encode(content)
+        t = adain(content_feat, style_feat)
+        t = alpha * t + (1 - alpha) * content_feat
         g_t = self.decoder(t)
         return g_t
