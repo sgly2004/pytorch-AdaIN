@@ -76,7 +76,7 @@ parser.add_argument('--max_iter', type=int, default=160000)
 parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--style_weight', type=float, default=5.0)
 parser.add_argument('--content_weight', type=float, default=1.0)
-parser.add_argument('--n_threads', type=int, default=8)
+parser.add_argument('--n_threads', type=int, default=1)
 parser.add_argument('--save_model_interval', type=int, default=100)
 parser.add_argument('--checkpoint_dir', default='./checkpoints',
                     help='Directory to save the checkpoints')
